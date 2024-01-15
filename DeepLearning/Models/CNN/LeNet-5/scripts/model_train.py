@@ -3,7 +3,6 @@ import time
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from tqdm import trange
 import matplotlib.pyplot as plt
 
 import torch
