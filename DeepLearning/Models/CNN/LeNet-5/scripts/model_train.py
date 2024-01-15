@@ -31,14 +31,14 @@ def train_valid_split():
 
     # 将训练集和验证集转换为可迭代的 DataLoader 对象
     train_dataloader = Data.DataLoader(dataset=train_data,
-                                       batch_size=32,
+                                       batch_size=128,
                                        shuffle=True,
-                                       num_workers=8)
+                                       num_workers=2)
 
     valid_dataloader = Data.DataLoader(dataset=valid_data,
-                                       batch_size=32,
+                                       batch_size=128,
                                        shuffle=True,
-                                       num_workers=8)
+                                       num_workers=2)
 
     return train_dataloader, valid_dataloader
 
@@ -82,8 +82,11 @@ def train_model(model, train_dataloader, valid_dataloader, num_epochs, learning_
 
     # 分轮次训练模型
     for epoch in range(num_epochs):
+        # 记录本轮次开始的的时间
+        epoch_start_time = time.time()
+
         # 打印训练轮次
-        print("=" * 30)
+        print("=" * 70)
         print('Epoch {}/{}'.format(epoch + 1, num_epochs))
         print('-' * 10)
 
@@ -126,8 +129,7 @@ def train_model(model, train_dataloader, valid_dataloader, num_epochs, learning_
             # 将当前训练批次的损失值按照 batch_size 加权累加到当前轮次的总损失 train_loss 上
             train_loss += batch_loss.item() * batch_image.size(0)
             # 将当前训练批次的准确数量按照 batch_size 加权累加到当前轮次的总准确数 train_corrects 上
-            # noinspection PyTypeChecker
-            train_corrects += torch.sum(predict_label == batch_label.data)
+            train_corrects += torch.sum(torch.eq(predict_label, batch_label.data)).item()
 
             # 更新当前训练样本数
             train_sample_num += batch_image.size(0)
@@ -152,23 +154,27 @@ def train_model(model, train_dataloader, valid_dataloader, num_epochs, learning_
             # 将当前验证批次的损失值按照 batch_size 加权累加到当前轮次的验证总损失 valid_loss 上
             valid_loss += batch_loss.item() * batch_image.size(0)
             # 将当前验证批次的准确数量按照 batch_size 加权累加到当前轮次的总验证准确数 valid_corrects 上
-            valid_corrects += torch.sum(predict_label == batch_label.data)
+            valid_corrects += torch.sum(torch.eq(predict_label, batch_label.data)).item()
 
             # 更新当前验证样本数
             valid_sample_num += batch_image.size(0)
 
         # 计算当前轮次训练的平均损失值并添加到 train_loss_list 中
         train_loss = train_loss / train_sample_num
+        train_loss = round(train_loss, 4)
         train_loss_list.append(train_loss)
         # 计算当前轮次训练的平均准确率并添加到 train_acc_list 中
         train_acc = train_corrects / train_sample_num
+        train_acc = round(train_acc, 4)
         train_acc_list.append(train_acc)
 
         # 计算当前轮次验证的平均损失值并添加到 valid_loss_list 中
         valid_loss = valid_loss / valid_sample_num
+        valid_loss = round(valid_loss, 4)
         valid_loss_list.append(valid_loss)
         # 计算当前轮次验证的平均准确率并添加到 valid_acc_list 中
         valid_acc = valid_corrects / valid_sample_num
+        valid_acc = round(valid_acc, 4)
         valid_acc_list.append(valid_acc)
 
         # 打印当前轮次训练和验证的损失值和准确率
@@ -181,13 +187,11 @@ def train_model(model, train_dataloader, valid_dataloader, num_epochs, learning_
             best_model_params = copy.deepcopy(model.state_dict())
 
         # 打印当前轮次训练时间
-        time_elapsed = time.time() - train_start_time
-        print('Train complete in {:.0f}mim {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
+        time_elapsed = time.time() - epoch_start_time
+        print('Epoch {} complete in {:.0f}mim {:.0f}s'.format(epoch + 1, time_elapsed // 60, time_elapsed % 60))
 
-    # 训练结束，加载最优参数的模型
-    model.load_state_dict(best_model_params)
-    # 保存模型
-    torch.save(model.state_dict(), './best_model.pth')
+    # 训练结束, 保存模型
+    torch.save(best_model_params, '../best_model.pth')
 
     # 将训练过程中的损失值和准确率保存为 DataFrame
     train_process = pd.DataFrame(
@@ -200,6 +204,11 @@ def train_model(model, train_dataloader, valid_dataloader, num_epochs, learning_
         }
     )
     train_process.to_csv('./train_process.csv', index=False)
+
+    # 打印训练总时间
+    print("=" * 70)
+    time_elapsed = time.time() - train_start_time
+    print('Train complete in {:.0f}mim {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
 
     # 返回训练过程的 DataFrame
     return train_process
@@ -216,7 +225,11 @@ def plot_train_process(train_process: pd.DataFrame):
     plt.plot(train_process['Epoch'], train_process['Train_Loss'], 'ro-', label='Train Loss')
     plt.plot(train_process['Epoch'], train_process['Valid_Loss'], 'bs', label='Valid Loss')
     plt.xlabel('Epoch')
+    # 设置横坐标刻度从 0 开始，步长为 2
+    plt.xticks(np.arange(0, train_process['Epoch'].max() + 1, 2))
     plt.ylabel('Loss')
+    # 设置纵坐标刻度从 0 开始, 步长为 0.5
+    plt.yticks(np.arange(0, train_process['Train_Loss'].max() + 0.5, 0.5))
     plt.legend()
 
     # 绘制训练集和验证集的准确率曲线
@@ -224,7 +237,11 @@ def plot_train_process(train_process: pd.DataFrame):
     plt.plot(train_process['Epoch'], train_process['Train_Acc'], 'ro-', label='Train Acc')
     plt.plot(train_process['Epoch'], train_process['Valid_Acc'], 'bs', label='Valid Acc')
     plt.xlabel('Epoch')
+    # 设置横坐标刻度从 0 开始，步长为 2
+    plt.xticks(np.arange(0, train_process['Epoch'].max() + 1, 2))
     plt.ylabel('Acc')
+    # 设置纵坐标刻度从 0% 到 100%，步长为 20%，要求格式化显示为百分数
+    plt.yticks(np.arange(0, 1.2, 0.2), ['{}%'.format(int(x * 100)) for x in np.arange(0, 1.2, 0.2)])
     plt.legend()
 
     plt.savefig('./train_process.png')
