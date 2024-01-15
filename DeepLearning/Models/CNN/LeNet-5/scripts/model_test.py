@@ -74,8 +74,8 @@ if __name__ == '__main__':
     # 实例化模型
     model = LeNet5()
     # 加载模型参数
-    model.load_state_dict(torch.load('../best_model.pth'))
+    model.load_state_dict(torch.load('./best_model.pth'))
     # 处理数据集
     test_dataloader = test_data_process()
     # 测试模型
-    test_model(model, test_dataloader, show_detail=True)
+    test_model(model, test_dataloader, show_detail=False)
