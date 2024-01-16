@@ -10,7 +10,12 @@ class LeNet5(nn.Module):
     def __init__(self):
         super(LeNet5, self).__init__()
         # 决定用 GPU 还是 CPU
-        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        else:
+            self.device = torch.device("cpu")
 
         # 定义激活函数
         self.sigmoid = nn.Sigmoid()
