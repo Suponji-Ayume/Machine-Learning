@@ -9,6 +9,8 @@ class LeNet5(nn.Module):
     # 初始化
     def __init__(self):
         super(LeNet5, self).__init__()
+        # 决定用 GPU 还是 CPU
+        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
         # 定义激活函数
         self.sigmoid = nn.Sigmoid()
@@ -25,6 +27,9 @@ class LeNet5(nn.Module):
         self.linear7 = nn.Linear(in_features=84, out_features=10)
 
     def forward(self, x):
+        # 将数据加载到 device 上
+        x = x.to(self.device)
+
         # 第一个卷积块
         x = self.conv1(x)
         x = self.sigmoid(x)
@@ -54,7 +59,7 @@ class LeNet5(nn.Module):
 # 主函数
 if __name__ == '__main__':
     # 决定使用 GPU 还是 CPU
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     print('Using device:', device)
 
     # 实例化模型

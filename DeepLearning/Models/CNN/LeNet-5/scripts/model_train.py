@@ -1,6 +1,5 @@
 import copy
 import time
-from time import sleep
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,6 +13,38 @@ from tqdm import tqdm
 
 # 导入模型
 from model import LeNet5
+
+
+# 重构 DataLoader
+class MultiEpochsDataLoader(torch.utils.data.DataLoader):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._DataLoader__initialized = False
+        self.batch_sampler = _RepeatSampler(self.batch_sampler)
+        self._DataLoader__initialized = True
+        self.iterator = super().__iter__()
+
+    def __len__(self):
+        return len(self.batch_sampler.sampler)
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield next(self.iterator)
+
+
+class _RepeatSampler(object):
+    """ Sampler that repeats forever.
+    Args:
+        sampler (Sampler)
+    """
+
+    def __init__(self, sampler):
+        self.sampler = sampler
+
+    def __iter__(self):
+        while True:
+            yield from iter(self.sampler)
 
 
 # 处理数据集，划分为训练集和验证集
@@ -30,21 +61,21 @@ def train_valid_split():
     train_data, valid_data = Data.random_split(Train_Dataset, [train_size, valid_size])
 
     # 将训练集和验证集转换为可迭代的 DataLoader 对象
-    train_dataloader = Data.DataLoader(dataset=train_data,
-                                       batch_size=128,
-                                       shuffle=True,
-                                       num_workers=2)
+    train_dataloader = MultiEpochsDataLoader(dataset=train_data,
+                                             batch_size=2048,
+                                             shuffle=True,
+                                             num_workers=8,
+                                             pin_memory=True)
 
-    valid_dataloader = Data.DataLoader(dataset=valid_data,
-                                       batch_size=128,
-                                       shuffle=True,
-                                       num_workers=2)
-
+    valid_dataloader = MultiEpochsDataLoader(dataset=valid_data,
+                                             batch_size=2048,
+                                             shuffle=True,
+                                             num_workers=8,
+                                             pin_memory=True)
     return train_dataloader, valid_dataloader
 
 
 # 训练模型
-# noinspection PyTypeChecker
 def train_model(model, train_dataloader, valid_dataloader, num_epochs, learning_rate):
     """
     @param model: 模型名称
@@ -56,7 +87,8 @@ def train_model(model, train_dataloader, valid_dataloader, num_epochs, learning_
     """
 
     # 决定使用 GPU 还是 CPU
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+
     # 定义损失函数
     criterion = nn.CrossEntropyLoss()
     # 定义优化器
@@ -84,12 +116,6 @@ def train_model(model, train_dataloader, valid_dataloader, num_epochs, learning_
     for epoch in range(num_epochs):
         # 记录本轮次开始的的时间
         epoch_start_time = time.time()
-        sleep(1)
-
-        # 打印训练轮次
-        # print("=" * 70)
-        # print('Epoch {}/{}'.format(epoch + 1, num_epochs))
-        # print('-' * 10)
 
         # 初始化每轮训练的损失值和准确率
         train_loss = 0.0
@@ -103,12 +129,14 @@ def train_model(model, train_dataloader, valid_dataloader, num_epochs, learning_
         valid_sample_num = 0
 
         # 对每一个 mini-batch 进行分批次训练和计算
-        with tqdm(total=len(train_dataloader) + len(valid_dataloader), colour="green", ncols=150, unit=' batch') as pbar:
+        with tqdm(total=len(train_dataloader) + len(valid_dataloader), colour="green", ncols=150,
+                  unit=' batch') as pbar:
             # 设置进度条的前缀
             pbar.set_description('Epoch {}/{}'.format(epoch + 1, num_epochs))
             pbar.set_postfix_str(
-                "Train Loss: {:.4f}\tTrain Acc: {:.2f}%\tValid Loss: {:.4f}\t Valid Acc: {:.2f}%".format(0, 0, 0, 0))
+                "Train Loss: {:.4f}  Train Acc: {:.2f}%  Valid Loss: {:.4f}  Valid Acc: {:.2f}%".format(0, 0, 0, 0))
 
+            # 对每一个 mini-batch 进行分批次训练和计算
             for step, (batch_image, batch_label) in enumerate(train_dataloader):
                 # 将特征图和标签数据加载到 device 上
                 batch_image = batch_image.to(device)
@@ -142,7 +170,7 @@ def train_model(model, train_dataloader, valid_dataloader, num_epochs, learning_
 
                 # 设置进度条的监测量
                 pbar.set_postfix_str(
-                    "Train Loss: {:.4f}\tTrain Acc: {:.2f}%\tValid Loss: {:.4f}\t Valid Acc: {:.2f}%".format(
+                    "Train Loss: {:.4f}  Train Acc: {:.2f}%  Valid Loss: {:.4f}  Valid Acc: {:.2f}%".format(
                         round(train_loss / train_sample_num, 4),
                         round(train_corrects / train_sample_num, 4) * 100,
                         0,
@@ -151,7 +179,6 @@ def train_model(model, train_dataloader, valid_dataloader, num_epochs, learning_
                 pbar.update(1)
 
             # 对每一个 mini-batch 进行分批次验证和计算
-            # print("Validating Progress:")
             for step, (batch_image, batch_label) in enumerate(valid_dataloader):
                 # 将特征图和标签数据加载到 device 上
                 batch_image = batch_image.to(device)
@@ -177,7 +204,7 @@ def train_model(model, train_dataloader, valid_dataloader, num_epochs, learning_
 
                 # 设置进度条的监测量
                 pbar.set_postfix_str(
-                    "Train Loss: {:.4f}\tTrain Acc: {:.2f}%\tValid Loss: {:.4f}\tValid Acc: {:.2f}%".format(
+                    "Train Loss: {:.4f}\tTrain Acc: {:.2f}%\tValid Loss: {:.4f}\t Valid Acc: {:.2f}%".format(
                         round(train_loss / train_sample_num, 4),
                         round(train_corrects / train_sample_num, 4) * 100, round(valid_loss / valid_sample_num, 4),
                         round(valid_corrects / valid_sample_num, 4) * 100))
@@ -201,10 +228,6 @@ def train_model(model, train_dataloader, valid_dataloader, num_epochs, learning_
         valid_acc = valid_corrects / valid_sample_num
         valid_acc = round(valid_acc, 4)
         valid_acc_list.append(valid_acc)
-
-        # # 打印当前轮次训练和验证的损失值和准确率
-        # print('Train Loss: {:.4f} Train Acc: {:.4f}'.format(train_loss, train_acc))
-        # print('Valid Loss: {:.4f} Valid Acc: {:.4f}'.format(valid_loss, valid_acc))
 
         # 如果当前轮次验证准确率更高，则更新最佳验证准确率和最佳模型参数
         if valid_acc > best_valid_acc:
