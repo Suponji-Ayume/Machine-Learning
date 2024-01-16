@@ -1,1 +1,0 @@
-../../Data/cat.png 3
